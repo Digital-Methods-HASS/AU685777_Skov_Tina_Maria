@@ -1,0 +1,196 @@
+---
+title: "USSR economy comparisons"
+author: "Tina Maria Villesen Skov and Mie Højfeldt Kristensen"
+date: "2 Jan 2021, updated `r format(Sys.time(), '%d %B, %Y')`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# About
+We will use the data output, which consists of various diagrams that visually substantiate our arguments for the development of prosperity in different states in Eastern Europe in our exam project above.
+
+## FAIR
+We areadhering to the FAIR compliance principles.
+
+F - Findable, solution is hosted on public github repository. All used data is included in their aswell in the "Data" folder. Column names and descriptive data is also included. Opening the original xls files hav even more meta data included.
+A - Accessibility, no authentication or authorization is need. Content can even be scrapped from the public github repository.
+I - Interoperable, the data can be cross referenced accross other data set. Eg. country codes are written in the ISO 3166-1 standard format. So all other dataset following this standard can reference this data directly.
+R - Reusable, our data sets can be easily reused in another application. Data is completly seperated from the code.
+
+# Technical walkhtrough
+
+## Language
+This HTML document is generated using R's markdown language. The R scripts themselfs are embedded into the rmd file. We have been using RStudio editor and its Knit functionality to create the HTML.
+
+## Dependencies
+We are using the tidyverse package which include alot of handy packgaes, to help make data sceince easier and more efficient.
+```{r library, warning=FALSE, message=FALSE, echo = TRUE}
+library(tidyverse)
+```
+
+Following of "tidyvers" libraries were used in this solution:
+
+* readr : For reading csv files into variables in memory.
+* tidyr : For coverting wide tables into long tables. Making it easy to plot the graphs without doing to much data adjustments in eg. self built helper functions.
+* plyr : Used for filtering datasets read from csv in code. Eg. we use it select which countries to compare.
+* ggplot2 : Used for drawing th graphs
+
+## Data sets
+The data sets used for below graphs have been converted from xls files into csv files using excel. All data is included in this solutions and the original xls files are also available. Using csv files we can strip all the excel generated xml and only get the raw data, seperatred by ";". We are using the "read_csv2" because it will use ";" as delimeter.
+
+```{r readCsv, warning=FALSE, message=FALSE, echo = TRUE}
+# Read csv's , using the read_csv2 because data is delimited by semi colon 
+gdpYearlyGrowthPercent <- read_csv2("Data/Dataset-aarlig-stigning-i-BNP.csv")
+gdpPerCapitaYearlyUSD <- read_csv2("Data/Dataset-BNP-pr-indbygger-i-USD.csv")
+gdpPerCapitaYearlyPercent <- read_csv2("Data/Dataset-BNP-pr-indbygger-stigning-pr-aar-filtereret.csv")
+gdpYearlyInflationPercent <- read_csv2("Data/Dataset-inflation-BNP-implicit.csv")
+spendings <- read_csv2("Data/Dataset-from-Euromonitor-FORBRUG.csv")
+gdpBreakDown <- read_csv2("Data/Dataset-from-Euromonitor-BNP-GDP.csv")
+unemployment <- read_csv2("Data/Unemployment.csv")
+```
+
+## Plots
+We create a list of countries we want to filter our data sets by. The countries are put into a char vector, and is now availeble for the rest of the solution. We only declare it once.
+```{r countryList, warning=FALSE, message=FALSE, echo=TRUE}
+# Country codes to filter data sets by
+countriesCodes <- c("BGR", "HUN", "ROU", "POL", "RUS", "UKR", "EST", "LVA", "LTU", "WLD")
+```
+
+### Drawing functions
+Since we are drawing multiple instances of the same type of graph, we have put the code that otherwise would have been repeated multiple times, into their own functions. This is helping us making our code less bloated, easier to maintain and read. When we need customized behaviour we control that with the paramteres that is being fed into the functions when executoing them.
+
+To make the plotting of the graphs easier we convert the data sets from wide format and into long format using the "gather" function.
+
+Ex:
+
+```{=html}
+<div style="font-family: monospace; white-space: pre-wrap;">
+Wide
++---------+------+------+------+
+| Country | 1960 | 1961 | 1962 |
++---------+------+------+------+
+| Denmark |  111 |  222 |  333 |
+| Sweden  |  444 |  555 |  666 |
++---------+------+------+------+
+
+Long
++---------+------+-------+
+| Country | Year | Value |
++---------+------+-------+
+| Denmark | 1960 |   111 |
+| Sweden  | 1960 |   444 |
+| Denmark | 1961 |   222 |
+| Sweden  | 1961 |   555 |
+| Denmark | 1962 |   333 |
+| Sweden  | 1962 |   666 |
++---------+------+-------+
+</div>
+```
+
+Now we can use the newly created "Year" collumn as x axis and make the y axis "Value". We the group the lines by country.
+
+#### drawGpdGraph()
+Used for drawing line charts related to GDP.
+```{r drawingGdp, warning=FALSE, message=FALSE, echo=TRUE}
+drawGpdGraph <- function(dataset, title, yLabel, lineSize){
+  data_long <- dataset  %>% 
+  filter(`Country Code` %in% countriesCodes) %>%
+  gather(Year, value, "1988":"1998")
+          
+  ggplot(data_long, aes(x = Year, y = value, color = `Country Name`, group = `Country Name`)) +
+    geom_point() +
+    geom_line(size = lineSize) +
+    labs(y = yLabel,
+         title = title) +
+    theme(legend.position="bottom")
+}
+```
+
+#### drawPossesionGraph()
+Used for drawing graphs visualizing data regarding house holds of different countries. Here its worth noting we have the layout parameter. It enables us to choose which kind of layout the graphs should have. Supported values are "line" and "bar". When we are doing it like this we can easily extend the capabilities of this function to produce other types of graphs.
+```{r drawingPossesion, warning=FALSE, message=FALSE, echo=TRUE}
+drawPossesionGraph <- function(dataset, category, title, layout){
+  data_long <- dataset %>% 
+  filter(Category == category) %>%
+  gather(Year, value, "1988":"1992")
+
+  # Check the layout parameter and determine what to kind of diagram to draw
+  if(layout == "line"){
+      plot <- ggplot(data_long, aes(x = Year, y = value, color = Geography, group = Geography)) +
+        geom_point() +
+        geom_line(size = 1.2)
+  } else if(layout == "bar"){
+      plot <- ggplot(data_long, aes(x = Year, y = value, fill = Geography, group = Geography)) +
+        geom_bar(stat='identity', position='dodge')
+  }
+  
+  # Shared settings
+  plot +
+  labs(y = "% of households",
+    title = title) +
+  theme(legend.position="bottom")
+}
+```
+
+#### drawPurchasingPowerGraph()
+This function is called only once. It was seperted because of the extra filter condition and the need for formating the y axis value. If we did not format that value we would get numeric values presented in not as readable scientific format.
+```{r drawingPurchasePower, warning=FALSE, message=FALSE, echo=TRUE}
+drawPurchasingPowerGraph <- function(){
+  data_long <- gdpBreakDown %>% 
+  filter(Category == "GDP Measured at Purchasing Power Parity" & Geography != "Eastern Europe") %>%
+  gather(Year, value, "1988":"1992")
+
+  ggplot(data_long, aes(x = Year, y = value, color = Geography, group = Geography)) +
+    geom_point() +
+    geom_line(size = 1.2) +
+    scale_y_continuous(labels=function(n){format(n, scientific = FALSE, big.mark=",")}) +
+    labs(y = "Million dollars",
+         title = "GDP Measured at Purchasing Power Parity") +
+    theme(legend.position="bottom")
+}
+```
+
+## Actual plots
+
+```{r fig.width = 14, warning=FALSE, message=FALSE, echo=TRUE}
+drawGpdGraph(gdpYearlyGrowthPercent, "GDP yearly growth in percent", "% of growth", 1.2)
+```
+
+```{r fig.width = 14, warning=FALSE, message=FALSE, echo=TRUE}
+drawGpdGraph(gdpPerCapitaYearlyUSD, "GDP per Capita yearly in US dollars", "USD", 1.2)
+```
+
+```{r fig.width = 14, warning=FALSE, message=FALSE, echo=TRUE}
+drawGpdGraph(gdpPerCapitaYearlyPercent, "GDP per Capita yearly growth in percent", "% of growth", 1.2)
+```
+
+```{r fig.width = 14, warning=FALSE, message=FALSE, echo=TRUE}
+drawGpdGraph(gdpYearlyInflationPercent, "Yearly inflation in percent", "% of inflation", 1)
+```
+
+```{r fig.width = 14, warning=FALSE, message=FALSE, echo=TRUE}
+drawGpdGraph(unemployment, "Unemployment of total labor force in percent", "% of unemployment", 1.2)
+```
+
+```{r fig.width = 14, warning=FALSE, message=FALSE, echo=TRUE}
+drawPurchasingPowerGraph()
+```
+
+```{r fig.width = 14, warning=FALSE, message=FALSE, echo=TRUE}
+drawPossesionGraph(spendings, "Possession of Refrigerator", "Possesion of refrigiator in household", "line")
+```
+
+```{r fig.width = 14, warning=FALSE, message=FALSE, echo=TRUE}
+drawPossesionGraph(spendings, "Possession of Refrigerator", "Possesion of refrigiator in household", "bar")
+```
+
+```{r fig.width = 14, warning=FALSE, message=FALSE, echo=TRUE}
+drawPossesionGraph(spendings, "Possession of Telephone", "Possesion of telephone in household", "line")
+```
+
+```{r fig.width = 14, warning=FALSE, message=FALSE, echo=TRUE}
+drawPossesionGraph(spendings, "Possession of Washing Machine", "Possesion of washing machine in household", "line")
+```
